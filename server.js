@@ -2,7 +2,10 @@ const http = require('http');
 const https = require('https');
 
 const PORT = process.env.PORT || 10000;
-const TARGET = process.env.DATA_SOURCE_ENDPOINT; // مثال: https://lux.shalqam.online:29479
+const TARGET = process.env.DATA_SOURCE_ENDPOINT; 
+
+// نادیده گرفتن ارورهای گواهی برای تست (اختیاری)
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 http.createServer((req, res) => {
   try {
@@ -14,7 +17,12 @@ http.createServer((req, res) => {
       port: url.port || (url.protocol === 'https:' ? 443 : 80),
       path: req.url,
       method: req.method,
-      headers: { ...req.headers, host: url.hostname }
+      headers: { 
+        ...req.headers, 
+        'host': url.hostname,
+        'connection': 'keep-alive'
+      },
+      timeout: 30000
     };
 
     const proxy = (url.protocol === 'https:' ? https : http).request(options, (remoteRes) => {
@@ -23,15 +31,16 @@ http.createServer((req, res) => {
     });
 
     proxy.on('error', (err) => {
-      console.error('Proxy Error:', err.message);
-      res.statusCode = 502;
-      res.end('Bad Gateway');
+      console.error('Proxy Detail Error:', err.message);
+      if (!res.headersSent) {
+        res.writeHead(502);
+        res.end(`Error: ${err.message}`);
+      }
     });
 
     req.pipe(proxy);
   } catch (err) {
-    console.error('URL Parsing Error:', err.message);
-    res.statusCode = 500;
-    res.end('Internal Server Error');
+    res.writeHead(500);
+    res.end('URL Parsing Error');
   }
-}).listen(PORT, () => console.log(`Proxy running on port ${PORT}`));
+}).listen(PORT, () => console.log(`Server is UP on port ${PORT}`));
